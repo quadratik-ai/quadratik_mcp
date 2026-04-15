@@ -1,0 +1,22 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      backendUrl:
+        type: string
+        default: "http://localhost:8080"
+        description: "URL of your Quadratik backend (leave default if running locally via Docker)"
+      apiKey:
+        type: string
+        description: "Your Quadratik API key (required for saving contacts, exporting, and managing lists)"
+    required: []
+  commandFunction: |-
+    (config) => ({
+      command: 'python',
+      args: ['main.py'],
+      env: {
+        QUADRATIK_BACKEND_URL: config.backendUrl || 'http://localhost:8080',
+        QUADRATIK_API_KEY: config.apiKey || ''
+      }
+    })
