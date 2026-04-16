@@ -1,3 +1,4 @@
+import json
 import os
 import contextvars
 from urllib.parse import parse_qs
@@ -34,6 +35,21 @@ class _ConfigMiddleware:
                 "headers": [[b"content-type", b"application/json"]],
             })
             await send({"type": "http.response.body", "body": body})
+            return
+
+        if scope["type"] == "http" and scope.get("path") == "/.well-known/mcp/server-card.json":
+            card = json.dumps({
+                "name": "Quadratik",
+                "description": "Search a B2B contact database with 500M+ profiles. Find leads by job title, company, location, industry, and more.",
+                "url": "/mcp",
+                "transport": "streamable-http",
+            }).encode()
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [[b"content-type", b"application/json"]],
+            })
+            await send({"type": "http.response.body", "body": card})
             return
 
         if scope["type"] in ("http", "websocket"):
