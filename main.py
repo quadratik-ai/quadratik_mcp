@@ -39,10 +39,39 @@ class _ConfigMiddleware:
 
         if scope["type"] == "http" and scope.get("path") == "/.well-known/mcp/server-card.json":
             card = json.dumps({
-                "name": "Quadratik",
-                "description": "Search a B2B contact database with 500M+ profiles. Find leads by job title, company, location, industry, and more.",
-                "url": "/",
-                "transport": "streamable-http",
+                "serverInfo": {
+                    "name": "Quadratik",
+                    "version": "1.0.0",
+                },
+                "authentication": {
+                    "required": False,
+                },
+                "tools": [
+                    {
+                        "name": "search_contacts",
+                        "description": "Search the Quadratik B2B contact database with rich filters. Returns contacts matching criteria like job title, company, location, industry, seniority, and more.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "job_titles": {"type": "array", "items": {"type": "string"}},
+                                "seniorities": {"type": "array", "items": {"type": "string"}},
+                                "contact_countries": {"type": "array", "items": {"type": "string"}},
+                                "company_name_contains": {"type": "array", "items": {"type": "string"}},
+                                "search_size": {"type": "integer", "default": 25},
+                            },
+                        },
+                    },
+                    {"name": "save_contacts", "description": "Save contacts to your Quadratik account.", "inputSchema": {"type": "object", "properties": {"contact_ids": {"type": "array", "items": {"type": "integer"}}}, "required": ["contact_ids"]}},
+                    {"name": "export_contacts", "description": "Export saved contacts as CSV.", "inputSchema": {"type": "object", "properties": {"contact_ids": {"type": "array", "items": {"type": "integer"}}}, "required": ["contact_ids"]}},
+                    {"name": "get_contact_lists", "description": "Retrieve all saved contact lists.", "inputSchema": {"type": "object", "properties": {}}},
+                    {"name": "create_list", "description": "Create a new contact list.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
+                    {"name": "delete_list", "description": "Delete a contact list.", "inputSchema": {"type": "object", "properties": {"list_id": {"type": "integer"}}, "required": ["list_id"]}},
+                    {"name": "get_company_suggestions", "description": "Autocomplete company names.", "inputSchema": {"type": "object", "properties": {"company_name": {"type": "string"}}, "required": ["company_name"]}},
+                    {"name": "get_industry_suggestions", "description": "Retrieve all industry categories.", "inputSchema": {"type": "object", "properties": {}}},
+                    {"name": "get_user_data", "description": "Fetch your Quadratik account data.", "inputSchema": {"type": "object", "properties": {}}},
+                ],
+                "resources": [],
+                "prompts": [],
             }).encode()
             await send({
                 "type": "http.response.start",
