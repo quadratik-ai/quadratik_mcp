@@ -41,7 +41,7 @@ class _ConfigMiddleware:
             card = json.dumps({
                 "name": "Quadratik",
                 "description": "Search a B2B contact database with 500M+ profiles. Find leads by job title, company, location, industry, and more.",
-                "url": "/mcp",
+                "url": "/",
                 "transport": "streamable-http",
             }).encode()
             await send({
@@ -65,7 +65,7 @@ class _ConfigMiddleware:
             await self.app(scope, receive, send)
 
 
-mcp = FastMCP("Quadratik")
+mcp = FastMCP("Quadratik", streamable_http_path="/")
 
 
 def _headers() -> dict:
