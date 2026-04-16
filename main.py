@@ -1,18 +1,60 @@
 import os
+import contextvars
+from urllib.parse import parse_qs
 from typing import List, Optional
 import httpx
 from mcp.server.fastmcp import FastMCP
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+# ---------------------------------------------------------------------------
+# Per-request config (populated by _ConfigMiddleware for HTTP transport,
+# or from env vars for stdio transport)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_BACKEND = os.environ.get("QUADRATIK_BACKEND_URL", "https://api.quadratik.ai")
+_DEFAULT_API_KEY = os.environ.get("QUADRATIK_API_KEY", "")
+
+_backend_url: contextvars.ContextVar[str] = contextvars.ContextVar("backend_url", default=_DEFAULT_BACKEND)
+_api_key: contextvars.ContextVar[str] = contextvars.ContextVar("api_key", default=_DEFAULT_API_KEY)
+
+
+class _ConfigMiddleware:
+    """Injects backendUrl and apiKey query params into context vars per request.
+    Also serves a /health endpoint for deployment health checks."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path") == "/health":
+            body = b'{"status":"ok"}'
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [[b"content-type", b"application/json"]],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
+
+        if scope["type"] in ("http", "websocket"):
+            params = parse_qs(scope.get("query_string", b"").decode())
+            t1 = _backend_url.set(params.get("backendUrl", [_DEFAULT_BACKEND])[0])
+            t2 = _api_key.set(params.get("apiKey", [_DEFAULT_API_KEY])[0])
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                _backend_url.reset(t1)
+                _api_key.reset(t2)
+        else:
+            await self.app(scope, receive, send)
+
 
 mcp = FastMCP("Quadratik")
 
-BACKEND_URL = os.environ.get("QUADRATIK_BACKEND_URL", "http://localhost:8080")
-API_KEY = os.environ.get("QUADRATIK_API_KEY", "")
-
 
 def _headers() -> dict:
-    if API_KEY:
-        return {"Authorization": f"Bearer {API_KEY}"}
-    return {}
+    key = _api_key.get()
+    return {"Authorization": f"Bearer {key}"} if key else {}
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +138,7 @@ async def search_contacts(
     }
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{BACKEND_URL}/search",
+            f"{_backend_url.get()}/search",
             json=payload,
             headers=_headers(),
             timeout=30.0,
@@ -124,7 +166,7 @@ async def save_contacts(
         payload["list_id"] = list_id
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{BACKEND_URL}/save_contacts",
+            f"{_backend_url.get()}/save_contacts",
             json=payload,
             headers=_headers(),
             timeout=30.0,
@@ -145,7 +187,7 @@ async def export_contacts(contact_ids: List[int]) -> str:
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{BACKEND_URL}/export",
+            f"{_backend_url.get()}/export",
             json={"contactIds": contact_ids},
             headers=_headers(),
             timeout=60.0,
@@ -166,7 +208,7 @@ async def get_contact_lists() -> dict:
     """
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{BACKEND_URL}/saved_contact_lists",
+            f"{_backend_url.get()}/saved_contact_lists",
             headers=_headers(),
             timeout=15.0,
         )
@@ -185,7 +227,7 @@ async def create_list(name: str) -> dict:
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{BACKEND_URL}/create_list",
+            f"{_backend_url.get()}/create_list",
             json={"name": name},
             headers=_headers(),
             timeout=15.0,
@@ -206,7 +248,7 @@ async def delete_list(list_id: int) -> dict:
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{BACKEND_URL}/delete_list",
+            f"{_backend_url.get()}/delete_list",
             json={"list_id": list_id},
             headers=_headers(),
             timeout=15.0,
@@ -231,7 +273,7 @@ async def get_company_suggestions(company_name: str) -> dict:
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{BACKEND_URL}/get_company_suggestions",
+            f"{_backend_url.get()}/get_company_suggestions",
             json={"companyName": company_name},
             headers=_headers(),
             timeout=10.0,
@@ -249,7 +291,7 @@ async def get_industry_suggestions() -> dict:
     """
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{BACKEND_URL}/get_industry_suggestions",
+            f"{_backend_url.get()}/get_industry_suggestions",
             headers=_headers(),
             timeout=10.0,
         )
@@ -269,7 +311,7 @@ async def get_user_data() -> dict:
     """
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{BACKEND_URL}/fetch_user_data",
+            f"{_backend_url.get()}/fetch_user_data",
             headers=_headers(),
             timeout=15.0,
         )
@@ -277,5 +319,24 @@ async def get_user_data() -> dict:
         return response.json()
 
 
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    import sys
+    print(f"Starting Quadratik MCP server...", flush=True)
+    transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    print(f"Transport: {transport}", flush=True)
+    if transport == "http":
+        import uvicorn
+        port = int(os.environ.get("PORT", "8000"))
+        print(f"Listening on 0.0.0.0:{port}", flush=True)
+        base_app = mcp.streamable_http_app()
+        uvicorn.run(
+            _ConfigMiddleware(base_app),
+            host="0.0.0.0",
+            port=port,
+        )
+    else:
+        mcp.run(transport="stdio")

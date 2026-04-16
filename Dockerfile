@@ -18,5 +18,8 @@ COPY . .
 # testing, we expose a placeholder
 EXPOSE 8000
 
+# Default to HTTP transport for deployed environments
+ENV MCP_TRANSPORT=http
+
 # Command to run the server
 CMD ["python", "main.py"]
