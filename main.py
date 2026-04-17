@@ -83,8 +83,16 @@ class _ConfigMiddleware:
 
         if scope["type"] in ("http", "websocket"):
             params = parse_qs(scope.get("query_string", b"").decode())
+            # API key: check X-API-Key header first, then query param, then env default
+            headers_list = scope.get("headers", [])
+            header_api_key = ""
+            for hdr_name, hdr_value in headers_list:
+                if hdr_name == b"x-api-key":
+                    header_api_key = hdr_value.decode()
+                    break
+            api_key = header_api_key or params.get("apiKey", [_DEFAULT_API_KEY])[0]
             t1 = _backend_url.set(params.get("backendUrl", [_DEFAULT_BACKEND])[0])
-            t2 = _api_key.set(params.get("apiKey", [_DEFAULT_API_KEY])[0])
+            t2 = _api_key.set(api_key)
             try:
                 await self.app(scope, receive, send)
             finally:

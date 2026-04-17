@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.quadratik-ai/quadratik",
+  "title": "Quadratik",
+  "description": "Search and manage 220M+ B2B contacts. Filter by title, industry, location, and more.",
+  "version": "1.0.0",
+  "websiteUrl": "https://quadratik.com",
+  "repository": {
+    "url": "https://github.com/quadratik-ai/quadratik",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://quadratikmcp-production.up.railway.app/",
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "description": "Your Quadratik API key. Get one at https://quadratik.com → Account Settings → API Keys. Optional for searching (results will have masked emails/phones), required for saving, exporting, and list management.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
